@@ -27,6 +27,12 @@ from yarr.agents.agent import ActResult
 from rvt.utils.dataset import _clip_encode_text
 from rvt.utils.lr_sched_utils import GradualWarmupScheduler
 
+from rvt.models.ccf import (
+    build_ccf_training_batch,
+    compute_ccf_loss,
+    get_ccf_scene_feat,
+    refine_waypoint_with_ccf,
+)
 
 def eval_con(gt, pred):
     assert gt.shape == pred.shape, print(f"{gt.shape} {pred.shape}")
@@ -295,6 +301,7 @@ class RVTAgent:
         cameras: list = peract_utils.CAMERAS,
         rot_ver: int = 0,
         rot_x_y_aug: int = 2,
+        ccf = None
         log_dir="",
     ):
         """
@@ -342,6 +349,12 @@ class RVTAgent:
         self.move_pc_in_bound = move_pc_in_bound
         self.rot_ver = rot_ver
         self.rot_x_y_aug = rot_x_y_aug
+
+        self.ccf_cfg = ccf
+        self.ccf_enabled = False
+
+        if self.ccf_cfg is not None:
+            self.ccf_enabled = bool(self.ccf_cfg.enabled)
 
         self._cross_entropy_loss = nn.CrossEntropyLoss(reduction="none")
         if isinstance(self._network, DistributedDataParallel):
@@ -667,6 +680,44 @@ class RVTAgent:
                 wpt_local, pts, out, dyn_cam_info, dims=(bs, nc, h, w)
             )
 
+            ccf_loss = None
+            ccf_loss_log = {}
+
+            if self.ccf_enabled:
+                if self._net_mod.ccf_head is None:
+                    raise RuntimeError(
+                        "exp_cfg.ccf.enabled=True, but mvt_cfg.ccf_enabled=False. "
+                        "Please use mvt/configs/rvt2_ccf.yaml."
+                    )
+
+                ccf_scene_feat = get_ccf_scene_feat(
+                    out=out,
+                    stage_two=self.stage_two,
+                )
+
+                ccf_target = build_ccf_training_batch(
+                    wpt_local=wpt_local,
+                    pc_list=pc,
+                    num_candidates=int(self.ccf_cfg.num_train_candidates),
+                    trans_sigma=float(self.ccf_cfg.train_trans_sigma),
+                    success_radius=float(self.ccf_cfg.success_radius),
+                    collision_radius=float(self.ccf_cfg.collision_radius),
+                    max_points=int(self.ccf_cfg.max_pc_points),
+                )
+
+                ccf_pred = self._net_mod.ccf_head(
+                    scene_feat=ccf_scene_feat,
+                    cand_pose_feat=ccf_target["cand_pose_feat"],
+                )
+
+                ccf_loss, ccf_loss_log = compute_ccf_loss(
+                    pred=ccf_pred,
+                    target=ccf_target,
+                    success_weight=float(self.ccf_cfg.success_loss_weight),
+                    collision_weight=float(self.ccf_cfg.collision_loss_weight),
+                    residual_weight=float(self.ccf_cfg.residual_loss_weight),
+                )
+
         loss_log = {}
         if backprop:
             with autocast(enabled=self.amp):
@@ -718,6 +769,9 @@ class RVTAgent:
                     + collision_loss
                 )
 
+                if ccf_loss is not None:
+                    total_loss = total_loss + float(self.ccf_cfg.total_loss_weight) * ccf_loss
+
             self._optimizer.zero_grad(set_to_none=True)
             self.scaler.scale(total_loss).backward()
             self.scaler.step(self._optimizer)
@@ -734,6 +788,9 @@ class RVTAgent:
                 "collision_loss": collision_loss.item(),
                 "lr": self._optimizer.param_groups[0]["lr"],
             }
+            if len(ccf_loss_log) > 0:
+                loss_log.update(ccf_loss_log)
+
             manage_loss_log(self, loss_log, reset_log=reset_log)
             return_out.update(loss_log)
 
@@ -875,6 +932,28 @@ class RVTAgent:
         pred_wpt_local = self._net_mod.get_wpt(
             out, mvt1_or_mvt2, dyn_cam_info, y_q
         )
+
+        if self.ccf_enabled:
+            if self._net_mod.ccf_head is None:
+                raise RuntimeError(
+                    "CCF is enabled in exp_cfg, but the network has no ccf_head. "
+                    "Please load a model trained with mvt/configs/rvt2_ccf.yaml."
+                )
+
+            ccf_scene_feat = get_ccf_scene_feat(
+                out=out,
+                stage_two=self.stage_two,
+            )
+
+            pred_wpt_local = refine_waypoint_with_ccf(
+                ccf_head=self._net_mod.ccf_head,
+                scene_feat=ccf_scene_feat,
+                center_xyz=pred_wpt_local,
+                num_candidates=int(self.ccf_cfg.num_infer_candidates),
+                trans_sigma=float(self.ccf_cfg.infer_trans_sigma),
+                collision_penalty=float(self.ccf_cfg.infer_collision_penalty),
+                max_residual=float(self.ccf_cfg.max_residual),
+            )
 
         pred_wpt = []
         for _pred_wpt_local, _rev_trans in zip(pred_wpt_local, rev_trans):

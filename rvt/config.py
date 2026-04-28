@@ -44,6 +44,22 @@ _C.rvt.img_aug = 0.1
 _C.rvt.place_with_mean = True
 _C.rvt.move_pc_in_bound = True
 
+_C.ccf = CN()
+_C.ccf.enabled = False
+_C.ccf.num_train_candidates = 32
+_C.ccf.num_infer_candidates = 64
+_C.ccf.train_trans_sigma = 0.035
+_C.ccf.infer_trans_sigma = 0.020
+_C.ccf.success_radius = 0.010
+_C.ccf.collision_radius = 0.006
+_C.ccf.max_pc_points = 4096
+_C.ccf.success_loss_weight = 1.0
+_C.ccf.collision_loss_weight = 0.5
+_C.ccf.residual_loss_weight = 1.0
+_C.ccf.total_loss_weight = 0.2
+_C.ccf.infer_collision_penalty = 0.7
+_C.ccf.max_residual = 0.025
+
 # arguments present in peract official
 _C.peract_official = CN()
 _C.peract_official.cfg_path = "configs/peract_official_config.yaml"

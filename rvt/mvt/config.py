@@ -47,6 +47,10 @@ _C.st_wpt_loc_aug = 0.05
 _C.st_wpt_loc_inp_no_noise = False
 _C.img_aug_2 = 0.0
 
+_C.ccf_enabled = False
+_C.ccf_hidden_dim = 256
+_C.ccf_num_layers = 3
+_C.ccf_dropout = 0.0
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for my_project."""

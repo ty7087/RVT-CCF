@@ -232,6 +232,7 @@ def experiment(rank, cmd_args, devices, port):
             cameras=CAMERAS,
             log_dir=f"{log_dir}/test_run/",
             cos_dec_max_step=EPOCHS * TRAINING_ITERATIONS,
+            ccf=exp_cfg.ccf,
             **exp_cfg.peract,
             **exp_cfg.rvt,
         )

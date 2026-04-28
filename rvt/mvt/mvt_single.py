@@ -344,6 +344,8 @@ class MVT(nn.Module):
             else:
                 feat_fc_dim += self.final_dim
 
+            self.ccf_scene_feat_dim = self.num_img * feat_fc_dim
+
             def get_feat_fc(
                 _feat_in_size,
                 _feat_out_size,
@@ -622,10 +624,14 @@ class MVT(nn.Module):
             feat.append(_feat)
 
             feat = torch.cat(feat, dim=-1)
+            feat_pre = feat
 
             if self.rot_ver == 0:
                 feat = self.feat_fc(feat)
-                out = {"feat": feat}
+                out = {
+                    "feat": feat,
+                    "feat_pre": feat_pre,
+                }
             elif self.rot_ver == 1:
                 # features except rotation
                 feat_ex_rot = self.feat_fc_ex_rot(feat)
@@ -654,6 +660,7 @@ class MVT(nn.Module):
                     "feat_x": feat_x,
                     "feat_y": feat_y,
                     "feat_z": feat_z,
+                    "feat_pre": feat_pre,
                 }
         else:
             out = {}

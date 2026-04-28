@@ -14,6 +14,10 @@ from rvt.mvt.mvt_single import MVT as MVTSingle
 from rvt.mvt.config import get_cfg_defaults
 from rvt.mvt.renderer import BoxRenderer
 
+import rvt.mvt.utils as mvt_utils
+
+from rvt.models.ccf import CounterfactualContactField
+
 
 class MVT(nn.Module):
     def __init__(
@@ -58,6 +62,10 @@ class MVT(nn.Module):
         st_wpt_loc_aug,
         st_wpt_loc_inp_no_noise,
         img_aug_2,
+        ccf_enabled,
+        ccf_hidden_dim,
+        ccf_num_layers,
+        ccf_dropout,
         renderer_device="cuda:0",
     ):
         """MultiView Transfomer
@@ -93,6 +101,10 @@ class MVT(nn.Module):
         del args["st_wpt_loc_aug"]
         del args["st_wpt_loc_inp_no_noise"]
         del args["img_aug_2"]
+        del args["ccf_enabled"]
+        del args["ccf_hidden_dim"]
+        del args["ccf_num_layers"]
+        del args["ccf_dropout"]
 
         self.rot_ver = rot_ver
         self.num_rot = num_rot
@@ -101,6 +113,10 @@ class MVT(nn.Module):
         self.st_wpt_loc_aug = st_wpt_loc_aug
         self.st_wpt_loc_inp_no_noise = st_wpt_loc_inp_no_noise
         self.img_aug_2 = img_aug_2
+        self.ccf_enabled = ccf_enabled
+        self.ccf_hidden_dim = ccf_hidden_dim
+        self.ccf_num_layers = ccf_num_layers
+        self.ccf_dropout = ccf_dropout
 
         # for verifying the input
         self.feat_ver = feat_ver
@@ -132,6 +148,22 @@ class MVT(nn.Module):
         )
         if self.stage_two:
             self.mvt2 = MVTSingle(**args, renderer=self.renderer)
+
+        if self.ccf_enabled:
+            if self.stage_two:
+                ccf_scene_feat_dim = self.mvt2.ccf_scene_feat_dim
+            else:
+                ccf_scene_feat_dim = self.mvt1.ccf_scene_feat_dim
+
+            self.ccf_head = CounterfactualContactField(
+                scene_feat_dim=ccf_scene_feat_dim,
+                pose_feat_dim=9,
+                hidden_dim=self.ccf_hidden_dim,
+                num_layers=self.ccf_num_layers,
+                dropout=self.ccf_dropout,
+            )
+        else:
+            self.ccf_head = None
 
     def get_pt_loc_on_img(self, pt, mvt1_or_mvt2, dyn_cam_info, out=None):
         """

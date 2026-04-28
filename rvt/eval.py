@@ -164,6 +164,7 @@ def load_agent(
                 scene_bounds=SCENE_BOUNDS,
                 cameras=CAMERAS,
                 log_dir=f"{eval_log_dir}/eval_run",
+                ccf=exp_cfg.ccf,
                 **exp_cfg.peract,
                 **exp_cfg.rvt,
             )
