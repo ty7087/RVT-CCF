@@ -3,21 +3,31 @@
 # Licensed under the NVIDIA Source Code License [see LICENSE for details].
 
 import os
+import sys
 import yaml
 import csv
 import torch
-import cv2
 import shutil
 
 import numpy as np
 
 from omegaconf import OmegaConf
 from multiprocessing import Value
-from tensorflow.python.summary.summary_iterator import summary_iterator
 from copy import deepcopy
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["BITSANDBYTES_NOWELCOME"] = "1"
+if os.environ.get("QT_QPA_PLATFORM") == "offscreen" and os.environ.get("DISPLAY"):
+    # CoppeliaSim vision sensors need a Qt platform that can create OpenGL contexts.
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
+    # Avoid llvmpipe's LLVM path in this container; it segfaults during GL setup.
+    os.environ.setdefault("GALLIUM_DRIVER", "softpipe")
+
+import cv2
+
+if os.environ.get("COPPELIASIM_ROOT"):
+    # cv2 can override Qt's plugin path; CoppeliaSim provides the offscreen plugin.
+    os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = os.environ["COPPELIASIM_ROOT"]
 
 from rlbench.backend import task as rlbench_task
 from rlbench.backend.utils import task_file_to_task_class
@@ -444,6 +454,8 @@ def _eval(args):
             .
         }
         """
+        from tensorflow.python.summary.summary_iterator import summary_iterator
+
         to_skip = {
             get_model_index(x): {y: False for y in args.tasks} for x in model_paths
         }
@@ -555,3 +567,6 @@ if __name__ == "__main__":
         yaml.dump(args.__dict__, fp)
 
     _eval(args)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)

@@ -301,7 +301,7 @@ class RVTAgent:
         cameras: list = peract_utils.CAMERAS,
         rot_ver: int = 0,
         rot_x_y_aug: int = 2,
-        ccf = None
+        ccf=None,
         log_dir="",
     ):
         """
