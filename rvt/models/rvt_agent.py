@@ -940,7 +940,7 @@ class RVTAgent:
         y_q,
         rev_trans,
         dyn_cam_info,
-    ):
+        ):
         if self.stage_two:
             assert y_q is None
             mvt1_or_mvt2 = False
