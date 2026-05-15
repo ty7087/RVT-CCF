@@ -49,8 +49,9 @@ _C.img_aug_2 = 0.0
 
 _C.ccf_enabled = False
 _C.ccf_hidden_dim = 256
-_C.ccf_num_layers = 3
+_C.ccf_num_layers = 4
 _C.ccf_dropout = 0.0
+_C.ccf_pose_feat_dim = 17
 
 def get_cfg_defaults():
     """Get a yacs CfgNode object with default values for my_project."""

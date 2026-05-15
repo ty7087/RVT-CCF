@@ -16,5 +16,6 @@ img_aug_2: 0.05
 
 ccf_enabled: True
 ccf_hidden_dim: 256
-ccf_num_layers: 3
+ccf_num_layers: 4
 ccf_dropout: 0.0
+ccf_pose_feat_dim: 17

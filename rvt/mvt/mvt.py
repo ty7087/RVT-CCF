@@ -66,6 +66,7 @@ class MVT(nn.Module):
         ccf_hidden_dim,
         ccf_num_layers,
         ccf_dropout,
+        ccf_pose_feat_dim,
         renderer_device="cuda:0",
     ):
         """MultiView Transfomer
@@ -105,6 +106,7 @@ class MVT(nn.Module):
         del args["ccf_hidden_dim"]
         del args["ccf_num_layers"]
         del args["ccf_dropout"]
+        del args["ccf_pose_feat_dim"]
 
         self.rot_ver = rot_ver
         self.num_rot = num_rot
@@ -117,6 +119,7 @@ class MVT(nn.Module):
         self.ccf_hidden_dim = ccf_hidden_dim
         self.ccf_num_layers = ccf_num_layers
         self.ccf_dropout = ccf_dropout
+        self.ccf_pose_feat_dim = ccf_pose_feat_dim
 
         # for verifying the input
         self.feat_ver = feat_ver
@@ -157,7 +160,7 @@ class MVT(nn.Module):
 
             self.ccf_head = CounterfactualContactField(
                 scene_feat_dim=ccf_scene_feat_dim,
-                pose_feat_dim=9,
+                pose_feat_dim=self.ccf_pose_feat_dim,
                 hidden_dim=self.ccf_hidden_dim,
                 num_layers=self.ccf_num_layers,
                 dropout=self.ccf_dropout,

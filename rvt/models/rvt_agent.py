@@ -31,7 +31,7 @@ from rvt.models.ccf import (
     build_ccf_training_batch,
     compute_ccf_loss,
     get_ccf_scene_feat,
-    refine_waypoint_with_ccf,
+    refine_pose_with_ccf,
 )
 
 def eval_con(gt, pred):
@@ -695,14 +695,30 @@ class RVTAgent:
                     stage_two=self.stage_two,
                 )
 
+                action_rot_torch = torch.tensor(
+                    action_rot,
+                    device=wpt_local.device,
+                    dtype=wpt_local.dtype,
+                )
+
                 ccf_target = build_ccf_training_batch(
                     wpt_local=wpt_local,
+                    action_rot_quat=action_rot_torch,
                     pc_list=pc,
                     num_candidates=int(self.ccf_cfg.num_train_candidates),
                     trans_sigma=float(self.ccf_cfg.train_trans_sigma),
+                    rot_sigma_deg=float(self.ccf_cfg.train_rot_sigma_deg),
                     success_radius=float(self.ccf_cfg.success_radius),
+                    success_rot_deg=float(self.ccf_cfg.success_rot_deg),
+                    contact_radius=float(self.ccf_cfg.contact_radius),
                     collision_radius=float(self.ccf_cfg.collision_radius),
-                    max_points=int(self.ccf_cfg.max_pc_points),
+                    max_pc_points=int(self.ccf_cfg.max_pc_points),
+                    gripper_jaw_width=float(self.ccf_cfg.gripper_jaw_width),
+                    gripper_finger_length=float(self.ccf_cfg.gripper_finger_length),
+                    gripper_finger_thickness=float(self.ccf_cfg.gripper_finger_thickness),
+                    gripper_palm_depth=float(self.ccf_cfg.gripper_palm_depth),
+                    gripper_points_per_finger=int(self.ccf_cfg.gripper_points_per_finger),
+                    gripper_points_on_palm=int(self.ccf_cfg.gripper_points_on_palm),
                 )
 
                 ccf_pred = self._net_mod.ccf_head(
@@ -714,8 +730,10 @@ class RVTAgent:
                     pred=ccf_pred,
                     target=ccf_target,
                     success_weight=float(self.ccf_cfg.success_loss_weight),
+                    contact_weight=float(self.ccf_cfg.contact_loss_weight),
                     collision_weight=float(self.ccf_cfg.collision_loss_weight),
-                    residual_weight=float(self.ccf_cfg.residual_loss_weight),
+                    residual_xyz_weight=float(self.ccf_cfg.residual_xyz_loss_weight),
+                    residual_rot_weight=float(self.ccf_cfg.residual_rot_loss_weight),
                 )
 
         loss_log = {}
@@ -913,7 +931,7 @@ class RVTAgent:
         else:
             return ActResult(continuous_action)
 
-    def get_pred(
+        def get_pred(
         self,
         out,
         rot_q,
@@ -933,33 +951,6 @@ class RVTAgent:
             out, mvt1_or_mvt2, dyn_cam_info, y_q
         )
 
-        if self.ccf_enabled:
-            if self._net_mod.ccf_head is None:
-                raise RuntimeError(
-                    "CCF is enabled in exp_cfg, but the network has no ccf_head. "
-                    "Please load a model trained with mvt/configs/rvt2_ccf.yaml."
-                )
-
-            ccf_scene_feat = get_ccf_scene_feat(
-                out=out,
-                stage_two=self.stage_two,
-            )
-
-            pred_wpt_local = refine_waypoint_with_ccf(
-                ccf_head=self._net_mod.ccf_head,
-                scene_feat=ccf_scene_feat,
-                center_xyz=pred_wpt_local,
-                num_candidates=int(self.ccf_cfg.num_infer_candidates),
-                trans_sigma=float(self.ccf_cfg.infer_trans_sigma),
-                collision_penalty=float(self.ccf_cfg.infer_collision_penalty),
-                max_residual=float(self.ccf_cfg.max_residual),
-            )
-
-        pred_wpt = []
-        for _pred_wpt_local, _rev_trans in zip(pred_wpt_local, rev_trans):
-            pred_wpt.append(_rev_trans(_pred_wpt_local))
-        pred_wpt = torch.cat([x.unsqueeze(0) for x in pred_wpt])
-
         pred_rot = torch.cat(
             (
                 rot_q[
@@ -977,9 +968,55 @@ class RVTAgent:
             ),
             dim=-1,
         )
+
         pred_rot_quat = aug_utils.discrete_euler_to_quaternion(
             pred_rot.cpu(), self._rotation_resolution
         )
+
+        if self.ccf_enabled:
+            if self._net_mod.ccf_head is None:
+                raise RuntimeError(
+                    "CCF is enabled in exp_cfg, but the network has no ccf_head. "
+                    "Please load a model trained with mvt/configs/rvt2_ccf.yaml."
+                )
+
+            ccf_scene_feat = get_ccf_scene_feat(
+                out=out,
+                stage_two=self.stage_two,
+            )
+
+            pred_rot_quat_torch = torch.tensor(
+                pred_rot_quat,
+                device=pred_wpt_local.device,
+                dtype=pred_wpt_local.dtype,
+            )
+
+            refined_wpt_local, refined_rot_quat_torch, ccf_info = refine_pose_with_ccf(
+                ccf_head=self._net_mod.ccf_head,
+                scene_feat=ccf_scene_feat,
+                center_xyz=pred_wpt_local,
+                center_quat_xyzw=pred_rot_quat_torch,
+                num_candidates=int(self.ccf_cfg.num_infer_candidates),
+                trans_sigma=float(self.ccf_cfg.infer_trans_sigma),
+                rot_sigma_deg=float(self.ccf_cfg.infer_rot_sigma_deg),
+                contact_bonus=float(self.ccf_cfg.infer_contact_bonus),
+                collision_penalty=float(self.ccf_cfg.infer_collision_penalty),
+                residual_penalty=float(self.ccf_cfg.infer_residual_penalty),
+                max_residual_xyz=float(self.ccf_cfg.max_residual_xyz),
+                max_residual_rot_deg=float(self.ccf_cfg.max_residual_rot_deg),
+            )
+
+            if bool(self.ccf_cfg.refine_position):
+                pred_wpt_local = refined_wpt_local
+
+            if bool(self.ccf_cfg.refine_rotation):
+                pred_rot_quat = refined_rot_quat_torch.detach().cpu().numpy()
+
+        pred_wpt = []
+        for _pred_wpt_local, _rev_trans in zip(pred_wpt_local, rev_trans):
+            pred_wpt.append(_rev_trans(_pred_wpt_local))
+        pred_wpt = torch.cat([x.unsqueeze(0) for x in pred_wpt])
+
         pred_grip = grip_q.argmax(1, keepdim=True)
         pred_coll = collision_q.argmax(1, keepdim=True)
 
