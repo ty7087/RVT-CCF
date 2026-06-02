@@ -931,7 +931,7 @@ class RVTAgent:
         else:
             return ActResult(continuous_action)
 
-        def get_pred(
+    def get_pred(
         self,
         out,
         rot_q,
@@ -940,7 +940,7 @@ class RVTAgent:
         y_q,
         rev_trans,
         dyn_cam_info,
-        ):
+    ):
         if self.stage_two:
             assert y_q is None
             mvt1_or_mvt2 = False

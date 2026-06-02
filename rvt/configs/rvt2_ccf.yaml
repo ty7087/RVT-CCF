@@ -1,8 +1,8 @@
 agent: our
-tasks: all
+tasks: light_bulb_in
 exp_id: rvt2_ccf_paper
 bs: 24
-epochs: 100
+epochs: 15
 num_workers: 4
 sample_distribution_mode: task_uniform
 train_iter: 160000

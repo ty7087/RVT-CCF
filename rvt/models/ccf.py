@@ -376,6 +376,7 @@ def build_pose_feature(
     rot_sigma_deg: float,
 ) -> torch.Tensor:
     delta_xyz = candidate_xyz - center_xyz.unsqueeze(1)
+
     safe_trans_sigma = max(float(trans_sigma), 1e-6)
     delta_xyz_norm = delta_xyz / safe_trans_sigma
 
@@ -386,10 +387,17 @@ def build_pose_feature(
     safe_rot_sigma = max(math.radians(float(rot_sigma_deg)), 1e-6)
     delta_axis_angle_norm = delta_axis_angle / safe_rot_sigma
 
+    delta_xyz_radius = torch.linalg.vector_norm(
+        delta_xyz_norm,
+        dim=-1,
+        keepdim=True,
+    )
+
     pose_feat = torch.cat(
         [
             delta_xyz_norm,
             delta_axis_angle_norm,
+            delta_xyz_radius,
             candidate_xyz,
             candidate_quat_xyzw,
             center_xyz.unsqueeze(1).expand_as(candidate_xyz),

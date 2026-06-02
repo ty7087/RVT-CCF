@@ -7,9 +7,12 @@ Utility function for Our Agent
 """
 import pdb
 import argparse
+import os
 import sys
 import signal
 from datetime import datetime
+
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
